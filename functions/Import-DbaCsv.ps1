@@ -394,7 +394,7 @@ function Import-DbaCsv {
                 if ($firstline -notmatch $Delimiter) {
                     Stop-Function -Message "Delimiter ($Delimiter) not found in first few rows of $file. If this is a single column import, please specify -SingleColumn"
                     return
-                }
+                }4
             }
 
             # Automatically generate Table name if not specified, then prompt user to confirm
@@ -525,8 +525,28 @@ function Import-DbaCsv {
                             } else {
                                 $ColumnMap = New-Object -TypeName "System.Collections.Hashtable"
 
+                                $dbTable = Get-DbaDbTable -SqlInstance $instance -Database $Database -Table "[$Schema].[$Table]"
+
+                                $colCache = $dbTable.Columns
+                                $colCache | ForEach-Object {
+                                    Add-Member -Type NoteProperty -Name "IsBcpMapped" -Value $false
+                                }
+
                                 $firstline -split $Delimiter | ForEach-Object {
-                                    $ColumnMap.Add($PSItem, $PSItem)
+                                    $csvColName = $PSItem
+
+                                    $dbCol = $colCache | Where-Object {
+                                        # edge case: case-sensistive collations where a table has both col1 and COL1
+                                        $_.Name -eq $csvColName
+                                    }
+
+                                    if ($dbCol) {
+                                        #exact match exists
+                                        $ColumnMap.Add($csvColName, $dbCol.Name)
+                                    } else {
+                                        # fuzzy-match, confirm?
+                                    }
+
                                 }
                             }
                         }
