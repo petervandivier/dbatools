@@ -32,18 +32,18 @@ function Compare-ColumnSetPair {
         [object]$Target
     )
 
-    function Assert-UniqueLabel {
+    <#function Assert-UniqueLabel {
         [CmdletBinding()]
         param (
             [array]$array
         )
         $array.Count -eq ($array | Select-Object -Unique).Count
-    }
+    }#>
 
     # $Source, $Target | Add-Member -MemberType NoteProperty -Name "IsUniqueLabel" -Value (Assert-UniqueLabel $_.Name)
 
-    $SourceSet = $foo.Columns | Select-Object ID, Name, Identity, Computed, DataType, IsExactMatch
-    $TargetSet = $bar.Columns  | Select-Object ID, Name, Identity, Computed, DataType, IsExactMatch
+    $SourceSet = $Source | Select-Object ID, Name, Identity, Computed, DataType, @{n = "IsExactMatch"; e = { $false } }, @{n = "IsMapped"; e = { $false } }
+    $TargetSet = $Target | Select-Object ID, Name, Identity, Computed, DataType, @{n = "IsExactMatch"; e = { $false } }, @{n = "IsMapped"; e = { $false } }
 
     $MatchSet = $SourceSet | ForEach-Object {
         $SourceID = $_.ID
@@ -52,9 +52,11 @@ function Compare-ColumnSetPair {
         $TargetMatch = $TargetSet | Where-Object Name -EQ $SourceName
 
         $IsExactMatch = $false
+        $IsMapped = $false
 
         if ($TargetMatch) {
             $IsExactMatch = $true
+            $IsMapped = $true
 
             $TargetID = $TargetMatch.ID
             $TargetName = $TargetMatch.Name
@@ -63,8 +65,8 @@ function Compare-ColumnSetPair {
         }
 
         $_.IsExactMatch = $IsExactMatch
+        $_.IsMapped = $IsMapped
         ($TargetSet | Where-Object Name -EQ $SourceName).IsExactMatch = $IsExactMatch
-
 
         [PSCustomObject]@{
             SourceID     = $SourceID
@@ -74,6 +76,15 @@ function Compare-ColumnSetPair {
             TargetName   = $TargetName
         }
     }
+
+    <#$TargetSet | Where-Object IsMapped -ne $true | ForEach-Object {
+        $_.IsMapped = $false
+
+        $MatchSet += [PSCustomObject]@{
+            TargetID   = $_.ID
+            TargetName = $_.Name
+        }
+    }#>
 
     return $MatchSet
 }
