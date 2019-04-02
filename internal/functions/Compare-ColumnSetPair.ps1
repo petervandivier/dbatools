@@ -67,6 +67,7 @@ function Compare-ColumnSetPair {
         $_.IsExactMatch = $IsExactMatch
         $_.IsMapped = $IsMapped
         ($TargetSet | Where-Object Name -EQ $SourceName).IsExactMatch = $IsExactMatch
+        ($TargetSet | Where-Object Name -EQ $SourceName).IsMapped = $IsMapped
 
         [PSCustomObject]@{
             SourceID     = $SourceID
@@ -75,16 +76,18 @@ function Compare-ColumnSetPair {
             TargetID     = $TargetID
             TargetName   = $TargetName
         }
+
+        # needed to handle for additional source columns not mapped in target
+        # assume these could be disposed better with proper scoping?
+        Remove-Variable SourceID, SourceName, TargetMatch, IsExactMatch, IsMapped, TargetID, TargetName -ErrorAction SilentlyContinue
     }
 
-    <#$TargetSet | Where-Object IsMapped -ne $true | ForEach-Object {
-        $_.IsMapped = $false
-
+    $TargetSet | Where-Object { $_.IsMapped -eq $false } | ForEach-Object {
         $MatchSet += [PSCustomObject]@{
             TargetID   = $_.ID
             TargetName = $_.Name
         }
-    }#>
+    }
 
     return $MatchSet
 }
