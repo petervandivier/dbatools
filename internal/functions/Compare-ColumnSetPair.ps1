@@ -32,6 +32,74 @@ function Compare-ColumnSetPair {
         [object]$Target
     )
 
+    function ConvertTo-ColumnVector {
+        <#
+            .SYNOPSIS
+                Standardize format of information needed to define a group of database columns.
+
+            .DESCRIPTION
+                This function is currently mapped to handle 3 possible input types. As of init commit, there are (loosely) 3 cases to handle for:vfr
+                    1. SMO $.Columns collection (see Get-DbaDbTable)
+                    2. Labelled array
+                    3. Unlabelled vector
+
+                Any array with a type labelled "Name" will parse. If no label of "Name" is found, the only permissible input is a list.
+
+                This function will also assign an Ordinal Position to each column by seeking for the "ID" attribute where available and assigning 1-indexed in-order incrementing numbers where not.
+
+                (is)Identity, (is)Computed, and DataType attributes are persisted if supplied but other attributes are discarded
+
+        #>
+        [CmdletBinding()]
+        param (
+            [Parameter(Mandatory)]
+            [object]$array
+        )
+
+        if ($array | Get-Member | Where-Object { $_.Name -eq "Name" }) {
+            if (-not ($array | Get-Member | Where-Object { $_.Name -eq "ID" })) {
+                # TODO: Handle for incomplete/gapped ID vector
+                $ID -eq 0
+
+                $array | ForEach-Object {
+                    $ID += 1
+                    $_ | Add-Member -MemberType "NoteProperty" -Name "ID" -Value $ID
+                }
+            }
+        } else {
+            if (($array | Get-Member | Where-Object { $_.MemberType -eq "Property" }).Count -eq 1 ) {
+                # unlabelled/wrong-labelled vector
+                $ID = 0
+                $array = $array | ForEach-Object {
+                    $ID += 1
+                    [PSCustomObject]@{
+                        ID   = $ID
+                        Name = $_
+                    }
+                }
+            } else {
+                # "Name" attribute not found and the object is not a list
+                Write-Error "YARGLEBARGLE"
+            }
+        }
+        Remove-Variable ID -ErrorAction SilentlyContinue
+
+        $array = $array | Sort-Object -Property 'ID' | ForEach-Object {
+
+            [PSCustomObject]@{
+                ID           = $_.ID
+                Name         = $_.Name
+                Identity     = $_.Identity
+                Computed     = $_.Computed
+                DataType     = $_.DataType
+                IsExactMatch = [bool]$null
+                IsMapped     = [bool]$null
+            }
+        }
+
+        return $array
+    }
+
     <#function Assert-UniqueLabel {
         [CmdletBinding()]
         param (
@@ -42,8 +110,8 @@ function Compare-ColumnSetPair {
 
     # $Source, $Target | Add-Member -MemberType NoteProperty -Name "IsUniqueLabel" -Value (Assert-UniqueLabel $_.Name)
 
-    $SourceSet = $Source | Select-Object ID, Name, Identity, Computed, DataType, @{n = "IsExactMatch"; e = { $false } }, @{n = "IsMapped"; e = { $false } }
-    $TargetSet = $Target | Select-Object ID, Name, Identity, Computed, DataType, @{n = "IsExactMatch"; e = { $false } }, @{n = "IsMapped"; e = { $false } }
+    $SourceSet = ConvertTo-ColumnVector $Source
+    $TargetSet = ConvertTo-ColumnVector $Target
 
     $MatchSet = $SourceSet | ForEach-Object {
         $SourceID = $_.ID
