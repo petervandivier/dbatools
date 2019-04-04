@@ -59,7 +59,7 @@ function Compare-ColumnSetPair {
         if ($array | Get-Member | Where-Object { $_.Name -eq "Name" }) {
             if (-not ($array | Get-Member | Where-Object { $_.Name -eq "ID" })) {
                 # TODO: Handle for incomplete/gapped ID vector
-                $ID -eq 0
+                $ID = 0
 
                 $array | ForEach-Object {
                     $ID += 1
