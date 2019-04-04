@@ -38,7 +38,7 @@ function Compare-ColumnSetPair {
                 Standardize format of information needed to define a group of database columns.
 
             .DESCRIPTION
-                This function is currently mapped to handle 3 possible input types. As of init commit, there are (loosely) 3 cases to handle for:vfr
+                This function is currently mapped to handle 3 possible input types. As of init commit, there are (loosely) 3 cases to handle for:
                     1. SMO $.Columns collection (see Get-DbaDbTable)
                     2. Labelled array
                     3. Unlabelled vector
@@ -79,7 +79,7 @@ function Compare-ColumnSetPair {
                 }
             } else {
                 # "Name" attribute not found and the object is not a list
-                Write-Error "YARGLEBARGLE"
+                # Silently fail and abort in outer function
             }
         }
         Remove-Variable ID -ErrorAction SilentlyContinue
@@ -93,7 +93,7 @@ function Compare-ColumnSetPair {
                 Computed     = $_.Computed
                 DataType     = $_.DataType
                 IsExactMatch = [bool]$null
-                IsMapped     = [bool]$null
+                IsMapped     = $false
             }
         }
 
@@ -112,6 +112,23 @@ function Compare-ColumnSetPair {
 
     $SourceSet = ConvertTo-ColumnVector $Source
     $TargetSet = ConvertTo-ColumnVector $Target
+
+    if (-not($SourceSet)) {
+        $errMsg = "The array provided for the SOURCE column set could not be parsed."
+    }
+    if (-not($TargetSet)) {
+        if ($errMsg) {
+            $errMsg = "Neither array supplied for source or target could be parsed into a column set for comparison."
+        } else {
+            $errMsg = "The array provided for the TARGET column set could not be parsed."
+        }
+    }
+    if ($errMsg) {
+        # NOTE TO SELF - write-message before PR
+        Write-Error $errMsg
+        return
+    }
+    Remove-Variable errMsg -ErrorAction SilentlyContinue
 
     $MatchSet = $SourceSet | ForEach-Object {
         $SourceID = $_.ID
@@ -134,8 +151,11 @@ function Compare-ColumnSetPair {
 
         $_.IsExactMatch = $IsExactMatch
         $_.IsMapped = $IsMapped
-        ($TargetSet | Where-Object Name -EQ $SourceName).IsExactMatch = $IsExactMatch
-        ($TargetSet | Where-Object Name -EQ $SourceName).IsMapped = $IsMapped
+
+        $TargetSet | Where-Object Name -EQ $SourceName | ForEach-Object {
+            $_.IsExactMatch = $IsExactMatch
+            $_.IsMapped = $IsMapped
+        }
 
         [PSCustomObject]@{
             SourceID     = $SourceID
@@ -152,8 +172,9 @@ function Compare-ColumnSetPair {
 
     $TargetSet | Where-Object { $_.IsMapped -eq $false } | ForEach-Object {
         $MatchSet += [PSCustomObject]@{
-            TargetID   = $_.ID
-            TargetName = $_.Name
+            IsExactMatch = $false
+            TargetID     = $_.ID
+            TargetName   = $_.Name
         }
     }
 
