@@ -1,4 +1,3 @@
-
 function ConvertTo-ColumnVector {
     <#
         .SYNOPSIS
@@ -14,6 +13,7 @@ function ConvertTo-ColumnVector {
             If
 
             (is)Identity, (is)Computed, and DataType attributes are persisted if supplied but other attributes are discarded
+
     #>
     [CmdletBinding()]
     param (
@@ -29,36 +29,44 @@ function ConvertTo-ColumnVector {
         $array.Count -eq ($array | Select-Object -Unique).Count
     }#>
 
-    # if ()
-    if ($array | Get-Member | Where-Object { $_.Name -eq "Name" }) {
-        if (-not ($array | Get-Member | Where-Object { $_.Name -eq "ID" })) {
-            # TODO: Handle for incomplete/gapped ID vector
-            $ID = 0
+    # having trouble leaking scope on variable modifications. i'm sure there's a cleaner way to do this...
 
-            $array | ForEach-Object {
-                $ID += 1
-                $_ | Add-Member -MemberType "NoteProperty" -Name "ID" -Value $ID
+    if ($array.PSObject.Properties.TypeNameOfValue -contains 'Microsoft.SqlServer.Management.Smo.SqlSmoObject') {
+        # do nothing, the object is well-formed (I hope...)
+        # TODO: make this suck less
+        # TODO: Handle for [tables[]].Columns input :facepalm:
+    } else {
+        # If object has NoteProperties, attempt to parse them
+
+        $ID = 0
+
+        $return_array = $array | Get-Member | Where-Object MemberType -eq 'NoteProperty' | ForEach-Object {
+            $ID += 1
+
+            [PSCustomObject]@{
+                ID   = $ID
+                Name = $_.Name
             }
         }
-    } else {
-        if (($array | Get-Member | Where-Object { $_.MemberType -like "Property" }).Count -eq 1 ) {
-            # unlabelled/wrong-labelled vector
-            $ID = 0
-            $array = $array | ForEach-Object {
+
+        if (-not($return_array)) {
+            # no NoteProperties were found; object is a list
+            # Assign each leaf as the "Name" value and infer ordinal position
+
+            $return_array = $array | ForEach-Object {
                 $ID += 1
+
                 [PSCustomObject]@{
                     ID   = $ID
                     Name = $_
                 }
             }
-        } else {
-            # "Name" attribute not found and the object is not a list
-            # Silently fail and abort in outer function
         }
-    }
-    Remove-Variable ID -ErrorAction SilentlyContinue
 
-    $return_array = $array | ForEach-Object {
+        Remove-Variable ID -ErrorAction SilentlyContinue
+    }
+
+    $return_array = $return_array | ForEach-Object {
         [PSCustomObject]@{
             ID           = $_.ID
             Name         = $_.Name
